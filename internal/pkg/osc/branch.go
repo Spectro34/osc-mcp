@@ -70,11 +70,29 @@ func (cred OSCCredentials) BranchBundle(ctx context.Context, req *mcp.CallToolRe
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	checkoutDir := filepath.Join(cred.TempDir, targetProject, targetPackage)
+
+	// Handle 400 Bad Request - branch might already exist
+	if resp.StatusCode == http.StatusBadRequest {
+		// Check if the target package already exists
+		checkURL := fmt.Sprintf("%s/source/%s/%s", cred.GetAPiAddr(), targetProject, targetPackage)
+		checkReq, _ := http.NewRequestWithContext(ctx, "GET", checkURL, nil)
+		checkReq.SetBasicAuth(cred.Name, cred.Passwd)
+		checkResp, checkErr := client.Do(checkReq)
+		if checkErr == nil {
+			checkResp.Body.Close()
+			if checkResp.StatusCode == http.StatusOK {
+				// Branch exists, proceed to checkout
+				slog.Info("Branch already exists, will checkout instead", "project", targetProject, "package", targetPackage)
+			} else {
+				return nil, BranchResult{}, fmt.Errorf("api request failed with status: %s (branch may already exist or permission denied)", resp.Status)
+			}
+		} else {
+			return nil, BranchResult{}, fmt.Errorf("api request failed with status: %s", resp.Status)
+		}
+	} else if resp.StatusCode != http.StatusOK {
 		return nil, BranchResult{}, fmt.Errorf("api request failed with status: %s", resp.Status)
 	}
-
-	checkoutDir := filepath.Join(cred.TempDir, targetProject, targetPackage)
 	if _, err := os.Stat(checkoutDir); err == nil { // directory exists
 		cmd := exec.CommandContext(ctx, "osc", "update")
 		cmd.Dir = checkoutDir

@@ -115,9 +115,9 @@ Extract parameters with defaults:
 
 ```javascript
 {
-  "packageName": "={{ $json.body?.packageName || 'hello' }}",
+  "packageName": "={{ $json.body?.packageName || 'buildkit' }}",
   "sourceProject": "={{ $json.body?.sourceProject || 'openSUSE:Factory' }}",
-  "targetVersion": "={{ $json.body?.targetVersion || '2.13' }}"
+  "targetVersion": "={{ $json.body?.targetVersion || '0.27.0' }}"
 }
 ```
 
@@ -213,9 +213,9 @@ Connect the MCP Client Tool to the AI Agent as a tool.
 curl -X POST "http://<n8n-host>:<port>/webhook/obs-upgrade" \
   -H "Content-Type: application/json" \
   -d '{
-    "packageName": "hello",
+    "packageName": "buildkit",
     "sourceProject": "openSUSE:Factory",
-    "targetVersion": "2.13"
+    "targetVersion": "0.27.0"
   }'
 ```
 
@@ -223,7 +223,7 @@ curl -X POST "http://<n8n-host>:<port>/webhook/obs-upgrade" \
 
 ```json
 {
-  "result": "### Summary\n\n- **Branch Project:** `home:username:branches:openSUSE:Factory`\n- **OBS URL:** [link](https://build.opensuse.org/package/show/home:username:branches:openSUSE:Factory/hello)\n- **Revision:** 2\n\nThe package `hello` has been successfully updated to version 2.13."
+  "result": "### Summary\n\n- **Branch Project:** `home:<username>:branches:openSUSE:Factory`\n- **OBS URL:** [link](https://build.opensuse.org/package/show/home:<username>:branches:openSUSE:Factory/buildkit)\n- **Revision:** 2\n\nThe package `buildkit` has been successfully updated to version 0.27.0."
 }
 ```
 
@@ -265,6 +265,7 @@ Increase the MCP Client Tool timeout. OBS operations can take time, especially f
 
 | Package | Source Project | Original Version | Target Version | Result |
 |---------|---------------|------------------|----------------|--------|
+| buildkit | openSUSE:Factory | 0.26.3 | 0.27.0 | Default example |
 | hello   | openSUSE:Factory | 2.12.2 | 2.13 | Success |
 | bc      | openSUSE:Factory | 1.08.2 | 1.08.3 | Success |
 

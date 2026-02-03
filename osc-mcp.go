@@ -7,9 +7,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"reflect"
 	"slices"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/openSUSE/mcp-archive/archive"
 	"github.com/openSUSE/osc-mcp/internal/pkg/licenses"
@@ -17,6 +19,47 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
+
+// flexibleSchema generates a JSON schema for a type that allows additional properties.
+// This is needed because n8n's AI Agent passes extra fields that would otherwise be rejected.
+func flexibleSchema[T any]() map[string]any {
+	schema, err := jsonschema.ForType(reflect.TypeFor[T](), &jsonschema.ForOptions{})
+	if err != nil {
+		slog.Error("failed to generate schema", "error", err)
+		return nil
+	}
+	// Convert to map and remove additionalProperties restriction
+	schemaMap := schemaToMap(schema)
+	delete(schemaMap, "additionalProperties")
+	return schemaMap
+}
+
+func schemaToMap(s *jsonschema.Schema) map[string]any {
+	result := make(map[string]any)
+	if s.Type != "" {
+		result["type"] = s.Type
+	}
+	if len(s.Required) > 0 {
+		result["required"] = s.Required
+	}
+	if len(s.Properties) > 0 {
+		props := make(map[string]any)
+		for name, prop := range s.Properties {
+			props[name] = schemaToMap(prop)
+		}
+		result["properties"] = props
+	}
+	if s.Description != "" {
+		result["description"] = s.Description
+	}
+	if s.Items != nil {
+		result["items"] = schemaToMap(s.Items)
+	}
+	if len(s.Enum) > 0 {
+		result["enum"] = s.Enum
+	}
+	return result
+}
 
 //go:embed data/defaults.yaml
 var defaultsYaml []byte
@@ -131,6 +174,7 @@ func main() {
 			Tool: &mcp.Tool{
 				Name:        "search_bundle",
 				Description: fmt.Sprintf("Search bundles on remote open build (OBS) instance %s or local bundles. A bundle is also known as source package. Use the project name 'local' to list local packages. If project and bundle name is empty local packages will be listed. A bundle must be built to create installable packages.", obsCred.Apiaddr),
+				InputSchema: flexibleSchema[osc.SearchSrcBundleParam](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
 				mcp.AddTool(server, tool, obsCred.SearchSrcBundle)
@@ -140,6 +184,7 @@ func main() {
 			Tool: &mcp.Tool{
 				Name:        "list_source_files",
 				Description: "List source files of given bundle in local or remote location. Also returns basic information of the files and if they are modified locally. The content of small files is returned and also the content of all relevant control files which are files with .spec and .kiwi suffix. Prefer this tool read command file before checking them out. If a file name is given only the requested file is shown, regardless it's size.",
+				InputSchema: flexibleSchema[osc.ListSrcFilesParam](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
 				mcp.AddTool(server, tool, obsCred.ListSrcFiles)
@@ -149,6 +194,7 @@ func main() {
 			Tool: &mcp.Tool{
 				Name:        "branch_bundle",
 				Description: fmt.Sprintf("Branch a bundle and check it out as local bundle under the path %s", obsCred.TempDir),
+				InputSchema: flexibleSchema[osc.BranchPackageParam](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
 				mcp.AddTool(server, tool, obsCred.BranchBundle)
@@ -158,6 +204,7 @@ func main() {
 			Tool: &mcp.Tool{
 				Name:        "run_build",
 				Description: "Build a source bundle also known as source package. A build is awlays local and withoout any online connection. All source files and software has to be downloaded and provided in advance.",
+				InputSchema: flexibleSchema[osc.BuildParam](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
 				mcp.AddTool(server, tool, obsCred.Build)
@@ -167,6 +214,7 @@ func main() {
 			Tool: &mcp.Tool{
 				Name:        "run_services",
 				Description: "Run OBS source services on a specified project and bundle. Important services are: download_files: downloads the source files reference via an URI in the spec file with the pattern https://github.com/foo/baar/v%{version}.tar.gz#./%{name}-%{version}.tar.gz, go_modules: which creates a vendor directory for go files if the source has the same name as the project.",
+				InputSchema: flexibleSchema[osc.RunServicesParam](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
 				mcp.AddTool(server, tool, obsCred.RunServices)
@@ -237,6 +285,7 @@ func main() {
 			Tool: &mcp.Tool{
 				Name:        "commit",
 				Description: "Commits changed files. If a .spec file is staged, the corresponding .changes file will be updated or created accordingly to input.",
+				InputSchema: flexibleSchema[osc.CommitCmd](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
 				mcp.AddTool(server, tool, obsCred.Commit)
@@ -264,6 +313,7 @@ func main() {
 			Tool: &mcp.Tool{
 				Name:        "edit_file",
 				Description: fmt.Sprintf("Write or update a file in a checked out package directory. The directory must be under %s. Use this to modify spec files or other source files after branching.", obsCred.TempDir),
+				InputSchema: flexibleSchema[osc.EditFileParams](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
 				mcp.AddTool(server, tool, obsCred.EditFile)

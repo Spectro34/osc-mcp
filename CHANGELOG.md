@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **edit_file tool**: New tool to modify files in checked out packages, enabling AI agents to update spec files, patches, and other source files.
+- **n8n AI Agent integration**: Support for using osc-mcp as a tool provider in n8n AI Agent workflows.
+- **Setup playbooks**: Added comprehensive setup guides in `playbooks/` directory for server deployment and n8n integration.
+
+### Fixed
+- **403 Forbidden on commit**: Fixed authentication issues caused by stale osc cookie cache. The server now automatically clears the cookie cache before osc operations.
+
 ## [0.2.1]
 
 ### Added

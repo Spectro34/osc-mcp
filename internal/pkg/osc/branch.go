@@ -93,6 +93,11 @@ func (cred OSCCredentials) BranchBundle(ctx context.Context, req *mcp.CallToolRe
 	} else if resp.StatusCode != http.StatusOK {
 		return nil, BranchResult{}, fmt.Errorf("api request failed with status: %s", resp.Status)
 	}
+	// Clear any stale osc cookie cache to ensure fresh authentication
+	if err := ClearOscCookieCache(); err != nil {
+		slog.Warn("failed to clear osc cookie cache", "error", err)
+	}
+
 	if _, err := os.Stat(checkoutDir); err == nil { // directory exists
 		cmd := exec.CommandContext(ctx, "osc", "update")
 		cmd.Dir = checkoutDir

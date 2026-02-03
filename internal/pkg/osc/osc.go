@@ -306,6 +306,24 @@ func (cred *OSCCredentials) buildRequest(ctx context.Context, method, url string
 	return req, nil
 }
 
+// ClearOscCookieCache removes the osc cookie cache to ensure fresh authentication.
+// This is needed because osc caches authentication cookies which can become stale
+// when switching between users or after credential changes.
+func ClearOscCookieCache() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	cookieJarPath := filepath.Join(home, ".local", "state", "osc", "cookiejar")
+	if _, err := os.Stat(cookieJarPath); err == nil {
+		if err := os.Remove(cookieJarPath); err != nil {
+			return fmt.Errorf("failed to remove osc cookie cache: %w", err)
+		}
+		slog.Debug("Cleared osc cookie cache", "path", cookieJarPath)
+	}
+	return nil
+}
+
 func (cred *OSCCredentials) apiGetRequest(ctx context.Context, path string, headers map[string]string) (*http.Response, error) {
 	apiURL := fmt.Sprintf("%s/%s", cred.GetAPiAddr(), path)
 	slog.Debug("API GET request", "url", apiURL, "path", path)

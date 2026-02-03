@@ -3,6 +3,10 @@ This project aims to offer a MCP service for the [Open Build Service](https://op
 
 An example conversation is [here](example.md)
 
+For setup instructions, see the [playbooks](playbooks/) directory.
+
+For n8n AI Agent integration, see [n8n-integration.md](playbooks/n8n-integration.md).
+
 >[!NOTE]
 >The project is in a very early stage, so things may break.
 
@@ -102,6 +106,7 @@ With that configuration `mcphost` will
 - **build_bundle**: Build a source bundle.
 - **get_project_meta**: Get the metadata of a project.
 - **set_project_meta**: Set the metadata for the project.
+- **edit_file**: Modify files in checked out packages (spec files, patches, etc.).
 
 - **create_bundle**: Create a new local bundle.
 - **checkout_bundle**: Checkout a package from the online repository.

@@ -95,6 +95,11 @@ func (cred *OSCCredentials) Commit(ctx context.Context, req *mcp.CallToolRequest
 	progressToken := req.Params.GetProgressToken()
 
 	if !cred.useInternalCommit {
+		// Clear any stale osc cookie cache to ensure fresh authentication
+		if err := ClearOscCookieCache(); err != nil {
+			slog.Warn("failed to clear osc cookie cache", "error", err)
+		}
+
 		baseCmdline := []string{"osc"}
 		configFile, err := cred.writeTempOscConfig()
 		if err != nil {
@@ -162,7 +167,7 @@ func (cred *OSCCredentials) Commit(ctx context.Context, req *mcp.CallToolRequest
 			slog.Debug("osc remove finished successfully", slog.String("command", oscDeleteCmd.String()), "output", string(output))
 		}
 
-		cmdline := append(baseCmdline, "commit", "-m", params.Message)
+		cmdline := append(baseCmdline, "commit", "--noservice", "-m", params.Message)
 
 		oscCmd := exec.CommandContext(ctx, cmdline[0], cmdline[1:]...)
 		oscCmd.Dir = params.Directory

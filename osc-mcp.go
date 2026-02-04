@@ -321,6 +321,16 @@ func main() {
 		},
 		{
 			Tool: &mcp.Tool{
+				Name:        "delete_files",
+				Description: fmt.Sprintf("Delete files matching glob patterns in a checked out package directory. Use this to remove old archives before running services. The directory must be under %s.", obsCred.TempDir),
+				InputSchema: flexibleSchema[osc.DeleteFilesParam](),
+			},
+			Register: func(server *mcp.Server, tool *mcp.Tool) {
+				mcp.AddTool(server, tool, obsCred.DeleteFiles)
+			},
+		},
+		{
+			Tool: &mcp.Tool{
 				Name:        "list_archive_files",
 				Description: "Content of an archive. Supported formats are cpio, tar.gz, tar.bz2, tar.xz and zip",
 			},

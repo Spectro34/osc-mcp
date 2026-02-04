@@ -37,7 +37,7 @@ type BuildResult struct {
 type RunServicesParam struct {
 	ProjectName string   `json:"project_name" jsonschema:"Name of the project"`
 	BundleName  string   `json:"bundle_name" jsonschema:"Name of the source package or bundle."`
-	Services    []string `json:"services" jsonschema:"List of services to run. Useful services are: download_files: downloads the source files reference via an URI in the spec file with the pattern https://github.com/foo/baar/v%{version}.tar.gz#./%{name}-%{version}.tar.gz, go_modules: which creates a vendor directory for go files if the source has the same name as the project."`
+	Services    []string `json:"services,omitempty" jsonschema:"Optional list of specific services to run. If empty or not provided, runs ALL services defined in the _service file (equivalent to 'osc service runall'). Common services: download_files, obs_scm, go_modules."`
 }
 
 type RunServicesResult struct {
@@ -54,9 +54,6 @@ func (cred *OSCCredentials) RunServices(ctx context.Context, req *mcp.CallToolRe
 	if params.BundleName == "" {
 		return nil, RunServicesResult{Success: false}, fmt.Errorf("package or bundle name must be specified")
 	}
-	if len(params.Services) == 0 {
-		return nil, RunServicesResult{Success: false}, fmt.Errorf("at least one service must be specified")
-	}
 
 	cmdlineCfg := []string{"osc"}
 	configFile, err := cred.writeTempOscConfig()
@@ -71,8 +68,21 @@ func (cred *OSCCredentials) RunServices(ctx context.Context, req *mcp.CallToolRe
 	progressToken := req.Params.GetProgressToken()
 
 	var outAll bytes.Buffer
+
+	// If no specific services provided, run all services (osc service runall)
+	if len(params.Services) == 0 {
+		params.Services = []string{""} // Empty string means run all
+	}
+
 	for _, service := range params.Services {
-		cmdline := append(cmdlineCfg, "service", "runall", service)
+		var cmdline []string
+		if service == "" {
+			// Run all services
+			cmdline = append(cmdlineCfg, "service", "runall")
+		} else {
+			// Run specific service
+			cmdline = append(cmdlineCfg, "service", "runall", service)
+		}
 		oscCmd := exec.CommandContext(ctx, cmdline[0], cmdline[1:]...)
 		oscCmd.Dir = cmdDir
 

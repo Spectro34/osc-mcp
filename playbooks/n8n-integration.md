@@ -6,11 +6,26 @@ This playbook guides you through integrating osc-mcp with n8n AI Agent workflows
 
 n8n is a workflow automation platform. By connecting osc-mcp as an MCP tool provider, you can create AI-powered workflows that automatically upgrade packages, fix build errors, and manage OBS projects.
 
+The key workflow for package upgrades follows this 6-step sequence:
+1. Branch the package from source project
+2. Get current source files (_service, spec, etc.)
+3. Update the _service file with new version/revision
+4. **Delete old source archives** (using `osc rm`)
+5. **Run OBS services** (`osc service runall`) to fetch new tarballs
+6. Commit changes (auto-handles `osc add` for new files)
+
+**Critical:** Steps 4 and 5 must be in this exact order - delete BEFORE running services.
+
 ## Prerequisites
 
 - osc-mcp server running (see [setup-osc-mcp.md](setup-osc-mcp.md))
 - n8n instance (self-hosted or cloud)
 - OpenAI API key (for GPT-4o or similar)
+- Required OBS service packages installed on osc-mcp host:
+  ```bash
+  zypper install obs-service-tar_scm obs-service-download_files \
+                 obs-service-recompress obs-service-set_version
+  ```
 
 ## Architecture
 
@@ -141,25 +156,45 @@ PACKAGE: ${pkg}
 SOURCE_PROJECT: ${proj}
 TARGET_VERSION: ${ver}
 
-Your task is to upgrade the package to the target version by following these steps:
+Execute these steps IN EXACT ORDER:
 
-1. **Branch the package** using branch_bundle:
-   - project_name: "${proj}"
-   - bundle_name: "${pkg}"
+**Step 1: Branch the package**
+Call branch_bundle with:
+- project_name: "${proj}"
+- bundle_name: "${pkg}"
+Save the target_project and checkout_dir from the response.
 
-2. **Get the spec file content** using list_source_files:
-   - project_name: (use the target_project from step 1)
-   - package_name: "${pkg}"
-   - local: true
+**Step 2: Get source files**
+Call list_source_files with:
+- project_name: (target_project from step 1)
+- package_name: "${pkg}"
+- local: true
+This returns the _service file and other source files.
 
-3. **Update the version** using edit_file:
-   - directory: (use checkout_dir from step 1)
-   - filename: "${pkg}.spec"
-   - content: (modified spec file with Version: ${ver})
+**Step 3: Update _service file**
+Call edit_file with:
+- directory: (checkout_dir from step 1)
+- filename: "_service"
+- content: (complete _service file with revision updated to "v${ver}")
+Update the <param name="revision"> value to the new version tag.
 
-4. **Commit the changes** using commit:
-   - directory: (same as step 3)
-   - message: "Update to version ${ver}"
+**Step 4: Delete old archives (CRITICAL - must be done BEFORE step 5)**
+Call delete_files with:
+- directory: (checkout_dir from step 1)
+- patterns: ["*.tar.gz", "*.tar", "*.obscpio", "*.tar.xz", "*.tar.bz2"]
+This runs 'osc rm' to mark old archives for removal.
+
+**Step 5: Run services (AFTER step 4)**
+Call run_services with:
+- project_name: (target_project from step 1)
+- bundle_name: "${pkg}"
+Do NOT specify the services parameter - this runs ALL services to fetch the new tarball.
+
+**Step 6: Commit changes**
+Call commit with:
+- directory: (checkout_dir from step 1)
+- message: "Update ${pkg} to version ${ver}"
+The commit automatically handles 'osc add' for new files.
 
 After completing all steps, provide a summary with:
 - Branch project name
@@ -179,7 +214,8 @@ After completing all steps, provide a summary with:
 
 - **Type:** Tools Agent
 - **Prompt:** `{{ $json.prompt }}`
-- **System Message:** "You are an OBS package maintainer assistant. Execute the steps exactly as described."
+- **System Message:** "You are an OBS package maintainer. Use the exact values given in the prompt for tool parameters."
+- **Max Iterations:** 20
 
 ### Node 6: MCP Client Tool
 
@@ -187,7 +223,7 @@ After completing all steps, provide a summary with:
 - **SSE Endpoint:** `http://osc-mcp.n8n.svc.cluster.local:8666/mcp`
 - **Transport:** httpStreamable
 - **Authentication:** None
-- **Timeout:** 180000 (3 minutes)
+- **Timeout:** 600000 (10 minutes) - OBS services can take time for large repos
 
 ### Node 7: Output Result (Set Node)
 
@@ -227,16 +263,34 @@ curl -X POST "http://<n8n-host>:<port>/webhook/obs-upgrade" \
 }
 ```
 
+## Timeout Settings
+
+| Component | Timeout | Description |
+|-----------|---------|-------------|
+| Workflow Execution | 1800s (30 min) | Overall workflow timeout in n8n settings |
+| MCP Client Tool | 600000ms (10 min) | Individual tool call timeout |
+| AI Agent Max Iterations | 20 | Maximum tool call iterations |
+
+To set workflow execution timeout: Workflow Settings > Execution Timeout > 1800
+
 ## Tool Call Sequence
 
-The AI Agent executes tools in this order:
+The AI Agent executes tools in this **exact order**:
 
-1. **branch_bundle** - Creates a branch and checks out the package
-2. **list_source_files** - Retrieves the current spec file content
-3. **edit_file** - Updates the Version field in the spec
-4. **commit** - Commits the changes to OBS
+1. **branch_bundle** - Creates a branch and checks out the package locally
+2. **list_source_files** - Retrieves _service, spec file, and other source contents
+3. **edit_file** - Updates the revision/version in the _service file
+4. **delete_files** - Removes old source archives using `osc rm` (BEFORE step 5!)
+5. **run_services** - Runs `osc service runall` to fetch new tarballs (AFTER step 4!)
+6. **commit** - Commits changes (auto-handles `osc add` for new files)
 
 ## Troubleshooting
+
+### "Request timed out" in AI Agent
+
+- Increase MCP Client Tool timeout to 600000ms (10 minutes)
+- Set workflow execution timeout to 1800s (30 minutes) in Workflow Settings
+- Check if `osc service runall` is taking too long (large repos with many files)
 
 ### "Could not connect to your MCP server"
 
@@ -246,6 +300,28 @@ The AI Agent executes tools in this order:
   ```bash
   kubectl exec -it <n8n-pod> -n n8n -- curl http://osc-mcp.n8n.svc.cluster.local:8666/mcp
   ```
+
+### Services fail with "obs-service-xxx not found"
+
+Install the required OBS service packages on the osc-mcp server host:
+```bash
+zypper install obs-service-tar_scm obs-service-download_files \
+               obs-service-recompress obs-service-set_version
+```
+
+### Old tarball not removed / New tarball not added
+
+Ensure the workflow executes steps in the correct order:
+1. `delete_files` MUST run BEFORE `run_services`
+2. The `delete_files` tool uses `osc rm` to properly mark files for removal
+3. The `commit` tool automatically runs `osc add` for new files
+
+### AI executes steps in wrong order
+
+The prompt must clearly emphasize step order with phrases like:
+- "Execute these steps IN EXACT ORDER"
+- "CRITICAL - must be done BEFORE step X"
+- "This step MUST be done BEFORE running services"
 
 ### AI returns template syntax literally
 
@@ -257,9 +333,12 @@ The AI Agent prompt field doesn't evaluate n8n expressions. Ensure you have the 
 - Check OBS credentials are valid
 - Ensure the user has permission to branch
 
-### Timeout errors
+### SELinux blocking osc-mcp binary
 
-Increase the MCP Client Tool timeout. OBS operations can take time, especially for large packages.
+If you see "Permission denied" when starting osc-mcp after deploying a new binary:
+```bash
+sudo restorecon -v /opt/osc-mcp/osc-mcp
+```
 
 ## Tested Packages
 

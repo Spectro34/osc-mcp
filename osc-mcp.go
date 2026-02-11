@@ -67,6 +67,22 @@ var defaultsYaml []byte
 //go:embed data/licenses.json
 var licensesJson []byte
 
+// flexibleAddTool wraps mcp.AddTool to generate input schemas that allow
+// additional properties. By default, schemas generated from Go structs set
+// additionalProperties to false, which causes MCP clients to get validation
+// errors when they send unexpected fields. This wrapper removes that
+// restriction while preserving all other validation (required fields, types).
+func flexibleAddTool[In, Out any](s *mcp.Server, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
+	if t.InputSchema == nil {
+		schema, err := jsonschema.For[In](nil)
+		if err == nil {
+			schema.AdditionalProperties = nil
+			t.InputSchema = schema
+		}
+	}
+	mcp.AddTool(s, t, h)
+}
+
 func main() {
 	osc.SetDefaultsYaml(defaultsYaml)
 	licenses.SetLicensesJson(licensesJson)
@@ -177,7 +193,7 @@ func main() {
 				InputSchema: flexibleSchema[osc.SearchSrcBundleParam](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.SearchSrcBundle)
+				flexibleAddTool(server, tool, obsCred.SearchSrcBundle)
 			},
 		},
 		{
@@ -187,7 +203,7 @@ func main() {
 				InputSchema: flexibleSchema[osc.ListSrcFilesParam](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.ListSrcFiles)
+				flexibleAddTool(server, tool, obsCred.ListSrcFiles)
 			},
 		},
 		{
@@ -197,7 +213,7 @@ func main() {
 				InputSchema: flexibleSchema[osc.BranchPackageParam](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.BranchBundle)
+				flexibleAddTool(server, tool, obsCred.BranchBundle)
 			},
 		},
 		{
@@ -207,7 +223,7 @@ func main() {
 				InputSchema: flexibleSchema[osc.BuildParam](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.Build)
+				flexibleAddTool(server, tool, obsCred.Build)
 			},
 		},
 		{
@@ -217,7 +233,7 @@ func main() {
 				InputSchema: flexibleSchema[osc.RunServicesParam](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.RunServices)
+				flexibleAddTool(server, tool, obsCred.RunServices)
 			},
 		},
 		{
@@ -226,7 +242,7 @@ func main() {
 				Description: "Get the metadata of a project. The metadata defines for which project a source bundle can be built the bundles inside the project. The subprojects of the projects are also listed. Project and sub project names are separated with colons.",
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.GetProjectMeta)
+				flexibleAddTool(server, tool, obsCred.GetProjectMeta)
 			},
 		},
 		{
@@ -235,7 +251,7 @@ func main() {
 				Description: "Set the metadata for the project. Create the project if it doesn't exist.",
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.SetProjectMeta)
+				flexibleAddTool(server, tool, obsCred.SetProjectMeta)
 			},
 		},
 		{
@@ -245,7 +261,7 @@ func main() {
 				InputSchema: osc.CreateBundleInputSchema(),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.Create)
+				flexibleAddTool(server, tool, obsCred.Create)
 			},
 		},
 		/*
@@ -260,7 +276,7 @@ func main() {
 				Description: fmt.Sprintf("Checkout a bundle from the online repository. After this step the package is available as local package under %s. Check out a single package instead of the complete repository if possible,", obsCred.TempDir),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.CheckoutBundle)
+				flexibleAddTool(server, tool, obsCred.CheckoutBundle)
 			},
 		},
 		{
@@ -269,7 +285,7 @@ func main() {
 				Description: "Get the remote or local build log of a package.",
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.BuildLog)
+				flexibleAddTool(server, tool, obsCred.BuildLog)
 			},
 		},
 		{
@@ -278,7 +294,7 @@ func main() {
 				Description: "Search the available packages for a remote repository. This are the already built packages and are required by bundles or source packages for building.",
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.SearchPackages)
+				flexibleAddTool(server, tool, obsCred.SearchPackages)
 			},
 		},
 		{
@@ -288,7 +304,7 @@ func main() {
 				InputSchema: flexibleSchema[osc.CommitCmd](),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.Commit)
+				flexibleAddTool(server, tool, obsCred.Commit)
 			},
 		},
 		{
@@ -297,7 +313,7 @@ func main() {
 				Description: fmt.Sprintf("Get a list of requests. Need to set one of the following: user, group, project, package, state, reviewstates, types, ids. If not package group or ids ist set %s will be set for user.", obsCred.Name),
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.ListRequests)
+				flexibleAddTool(server, tool, obsCred.ListRequests)
 			},
 		},
 		{
@@ -306,7 +322,7 @@ func main() {
 				Description: "Get a single request by its ID. Includes a diff to what has changed in that request.",
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, obsCred.GetRequest)
+				flexibleAddTool(server, tool, obsCred.GetRequest)
 			},
 		},
 		{
@@ -335,7 +351,7 @@ func main() {
 				Description: "Content of an archive. Supported formats are cpio, tar.gz, tar.bz2, tar.xz and zip",
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, archiver.ListArchiveFiles)
+				flexibleAddTool(server, tool, archiver.ListArchiveFiles)
 			},
 		},
 		{
@@ -344,7 +360,7 @@ func main() {
 				Description: "Extract files from a cpio, tar.gz, tar.bz2, tar.xz or zip archive. If no files are given the complete archive is extracted",
 			},
 			Register: func(server *mcp.Server, tool *mcp.Tool) {
-				mcp.AddTool(server, tool, archiver.ExtractArchiveFiles)
+				flexibleAddTool(server, tool, archiver.ExtractArchiveFiles)
 			},
 		},
 	}

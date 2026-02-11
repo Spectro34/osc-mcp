@@ -21,16 +21,11 @@ import (
 )
 
 type SearchSrcBundleParam struct {
-	// mcp.Meta
 	Name     string   `json:"package_name,omitempty" jsonschema:"Name of the source package to search"`
 	Projects []string `json:"projects,omitempty" jsonschema:"Optional list of projects to search in"`
 }
 
-func (p SearchSrcBundleParam) GetMeta() map[string]any {
-	return nil
-}
 
-func (p SearchSrcBundleParam) SetMeta(meta map[string]any) {}
 
 type BundleInfo struct {
 	Name        string `json:"name"`

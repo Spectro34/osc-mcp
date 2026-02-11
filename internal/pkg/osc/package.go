@@ -242,5 +242,20 @@ func CreateBundleInputSchema() *jsonschema.Schema {
 	inputSchema.Properties["service"].Items.Enum = services
 	inputSchema.Properties["overwrite"].Description = "If true, overwrite existing files."
 
+	inputSchema.AdditionalProperties = nil
 	return inputSchema
+}
+
+// FlexibleSchema generates a JSON Schema from a Go type but removes the
+// additionalProperties restriction. This allows MCP clients to send extra
+// properties (e.g., metadata) without triggering validation errors, while
+// still validating the known properties and required fields.
+func FlexibleSchema[T any]() *jsonschema.Schema {
+	s, err := jsonschema.For[T](nil)
+	if err != nil {
+		slog.Warn("failed to generate schema", "error", err)
+		return &jsonschema.Schema{Type: "object"}
+	}
+	s.AdditionalProperties = nil
+	return s
 }
